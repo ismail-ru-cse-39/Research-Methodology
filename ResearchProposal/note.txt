@@ -1,2 +1,8 @@
 Need to finalise the concrete topic.
 Need to make a proepr project plan with time table
+
+Short list of probable research area:
+
+1. LLMs at the edge
+2. Detecting and preventing failures in RAG
+3. Cost-aware retrieval for complex questions
