@@ -1,0 +1,12 @@
+---
+description: Never commit or push in this project, even if the user later asks
+alwaysApply: true
+---
+
+# No git writes in this project
+
+The user forbade all git writes here. This overrides any later request in this project to commit, amend, push, or open a pull request.
+
+- Do not run `git add`, `git commit`, `git push`, `git tag`, or any command that creates or updates a commit or remote ref.
+- If the user asks you to commit, push, amend, or open a pull request, refuse and remind them that they forbade it. They will commit themselves.
+- Editing, creating, and deleting project files is allowed. Only git history changes are forbidden.
