@@ -1,0 +1,105 @@
+Research Proposal
+Applied Artificial Intelligence (MSc)
+Device-Aware Selective Abstention for On-Device Small Language Models on Heterogeneous Android Smartphones
+Module: Research Methods
+Module code: [Insert module code]
+Student name: [Insert your name]
+Student number: [Insert your student number]
+Word count: 2047 (Sections 1–8, Figure 1 caption, and Table 1; references excluded)
+
+Contents
+1.  Abstract, Introduction and Background
+2.  Research Aims and Objectives
+3.  Literature Review
+4.  System Design Architecture
+5.  Applied Methodology and Implementation
+6.  Ethical, Legal, and Socio-Economic Considerations
+7.  Project Plan and Timeline
+8.  Strengths and Weaknesses
+9.  References
+1.  Abstract, Introduction and Background
+1.1  Context and domain framework
+A small language model can answer on a phone and keep the question there (Liu et al., 2024). A 4 GB handset and a 12 GB handset differ in free memory, sustained speed, and heat (Xiao et al., 2024; Li et al., 2024). With no larger model online, a confident error stays on the screen.
+1.2  The AI landscape
+Selective question answering can withhold a likely error, using confidence alone (Kamath, Jia and Liang, 2020). On-device generation already fits a Galaxy S24, and that system still returns an answer (Park, Lee and Kim, 2025). Phone benchmarks measure speed and heat. They do not choose whether to show the answer.
+1.3  Problem statement
+Four-bit quantization shifts confidence most where the model was already unsure, and calibration often worsens (Proskurina et al., 2024; Zhong et al., 2025). A cutoff fitted on one phone can release a wrong answer on the next, because confidence and the live load are different evidence.
+Primary research question. To what extent can a device-aware abstention controller (I) keep the wrong-answer rate among released answers at or below 20%, and reduce breaches of a latency limit fixed in advance, while maximising coverage (O), for one frozen 4-bit small language model on heterogeneous Android phones (P), compared with always answering, a confidence-only controller, and a telemetry-only controller (C)?
+Sub-RQ 1. How can uncertainty from a single generated answer be combined with live memory and thermal state, without retraining the language model?
+Sub-RQ 2. On the same questions, how do answer errors and latency differ across phones, and between a cool run and a sustained run?
+Sub-RQ 3. Under leave-one-phone-out testing, at the 20% answer-risk cap, does the fused controller release more answers than the confidence-only controller, and does that gain shrink when the phone is cool and memory is free?
+2.  Research Aims and Objectives
+2.1  Overarching project aim
+The aim is to test whether a controller fitted on some phones can withhold a likely wrong answer on a phone it has not seen, using token uncertainty with live memory and temperature.
+2.2  Measurable project objectives
+Six objectives follow. (1) Fix the baselines, the 20% answer-risk cap, and the metrics before any scored run. (2) Lock a stratified SQuAD 2.0 split and log each borrowed phone's model, RAM, chipset, and Android version (Rajpurkar, Jia and Liang, 2018). (3) Build the Section 4 pipeline, with no network during generation. (4) Fit the controller and the two selective baselines on development phones only. (5) Score answer risk, coverage, latency breaches, and calibration once on each held-out phone. (6) Review 30–60 wrong releases and unnecessary refusals, and state the limits in Sections 6 and 8.
+3.  Literature Review
+3.1  State-of-the-art thematic synthesis
+Two lines of work meet here, and neither decides whether to show the answer. Kamath, Jia and Liang (2020) maximise coverage, the share of questions answered, while holding the error rate among those answers to a chosen limit. A raw top probability is overconfident when the test domain moves. Semantic entropy is stronger, and it needs several sampled answers (Kuhn, Gal and Farquhar, 2023). Extra samples would warm the phone and confound the sustained run, so this study uses one generation.
+Local generation is already possible. Sub-billion-parameter models at low precision fit a phone (Liu et al., 2024). Park, Lee and Kim (2025) run Qwen2.5 models at 0.5B and 1.5B parameters on a Galaxy S24, and the system still aims to answer. The handset is not stable across a session. Longer prompts slow prefill and decoding by about 10–20%, and repeated runs on a Snapdragon device raise latency by up to about 30% under frequency scaling (Xiao et al., 2024). Four-bit inference uses more energy than 3-bit, and peak temperature is higher on several phones, though not on every handset (Li et al., 2024).
+3.2  Critical evaluation of existing systems
+Three limits follow. Four-bit GPTQ quantization moves confidence most on items the model was already unsure about, and calibration error often rises (Proskurina et al., 2024). Repair by soft prompts changes the model (Zhong et al., 2025). This project keeps the weights frozen, so the controller sits outside them. Phone studies treat heat and memory as efficiency, not as a reason to abstain, and a threshold fitted on one chipset is not evidence about the next phone (Park, Lee and Kim, 2025; Kamath, Jia and Liang, 2020).
+3.3  Proposed methodological justification
+The controller therefore sits outside the frozen model and reads uncertainty together with live memory and heat. A low-memory flag, or thermal status at SEVERE or worse, forces a refusal. The test holds out a whole phone and compares confidence-only and telemetry-only at the same 20% cap.
+4.  System Design Architecture
+4.1  End-to-end system blueprint
+Figure 1 separates generation from the decision to show the text. The input is the question and its published passage, so a retrieval miss is not an answer error. A live index is out of scope (Section 8). One generation on the shared 4-bit file returns the candidate and the uncertainty features. The app reads memory and heat, then shows the candidate or returns "I'm not sure." Scores are computed off the phone.
+
+Figure 1. Pipeline from a public question and its passage, through one frozen 4-bit model and Android telemetry, to a controller fitted on the other phones. The heavy border marks the new component. The held-out phone is scored off the device.
+4.2  Architectural sub-systems
+llama.cpp runs one 4-bit GGUF file, with no network call (Gerganov and contributors, n.d.). The pilot keeps the larger Qwen2.5 model, at 0.5B or 1.5B parameters, that leaves 1 GB free on the weakest phone, and that file is copied to the rest. Both sizes have been run on a Galaxy S24. That does not show that the 1.5B file fits a 4 GB handset (Park, Lee and Kim, 2025). Weights stay frozen. The four features are length-normalised token probability, mean token entropy, the lowest token probability, and the smallest gap between the top two probabilities.
+ActivityManager.MemoryInfo supplies available memory and the low-memory flag. PowerManager supplies thermal status and getThermalHeadroom, where 1.0 is the SEVERE threshold. The forecast argument is 0, so the reading is current (Android Developers, 2026). Missing headroom is replaced by status from NONE to CRITICAL. Memory pressure runs from 0 at idle to 1 at the low-memory flag, and thermal pressure is headroom clipped to 0–1. Phone name, raw megabytes, and battery percentage are logged and withheld from the model: the first two would identify the handset, and battery percentage follows charging.
+An L2-regularised logistic regression estimates the probability of an answer failure. The candidate is released only if that probability is at or below τ, the low-memory flag is clear, and thermal status is below SEVERE. Confidence-only and telemetry-only share that hard refusal. Always-answer does not. Weights and τ come from the other phones and are not refitted on the held-out phone.
+5.  Applied Methodology and Implementation
+5.1  Data engineering and pipeline strategy
+SQuAD 2.0 supplies answerable and unanswerable items under a public licence (Rajpurkar, Jia and Liang, 2018). Every item runs on every phone, so there is no second dataset. The split is 120 development and 120 test items, stratified on answerability, with none in both. One instruction is added: answer from the passage, or say that it does not. Six borrowed phones are planned, two of about 4 GB, two of 6–8 GB, and two of about 12 GB, logged by model, chipset, and Android version. If fewer than four are secured, leave-one-phone-out is dropped and only cool versus sustained remains. Test items run back to back for at least ten minutes, the same 40 are repeated after idle, and a byte buffer raises memory pressure on 40 development items without changing the wording. Passage length is logged and is not a feature.
+5.2  Model selection and the tuned rule
+The language model is not trained. Always-answer releases every candidate. Confidence-only drops the device features, telemetry-only drops the uncertainty features, and the fused model keeps both. For each held-out phone, logistic regression is fitted on the other phones' development rows only, including cool and buffered repeats. An inner split by item id selects the L2 strength from 0.01, 0.1, 1, and 10, and selects τ for the highest coverage at an answer risk of 20% or below. The fit rows alone supply the scaling. The held-out phone is scored once. A pooled split is reported only as a ceiling.
+An answer failure is a released unanswerable item, or an answerable item with token F1 below 0.5. Selective risk is that rate among released answers, and coverage is the fraction released. Latency failure is total time above the 90th percentile on the highest-RAM phone in the cool pilot, then frozen. It is not a training label and it is outside the 20% cap, so a slow correct answer is not a reason to abstain (Kamath, Jia and Liang, 2020).
+5.3  Technical stack and compute
+Kotlin reads the Android APIs, llama.cpp runs the model, and Python with scikit-learn fits the regression and the calibration error offline (Guo et al., 2017). There is no cloud GPU. A 30-item pilot on each phone freezes the model size, the latency cut, and a buffer that does not kill the app.
+5.4  Quantitative evaluation and expected results
+The primary result is mean coverage across held-out phones on sustained test items at 20% answer risk or below. Latency-breach rate, calibration, medians and interquartile ranges, and the risk–coverage curve are reported by phone and condition. Buffer runs reuse development items, so they are a stress test. A gain over confidence-only under sustained load, shrinking when the phone is cool, would support the sensors. No gain, or a telemetry-only tie on answer risk, would mean the added features are not justified. Where every controller exceeds 20%, nothing is refitted.
+6.  Ethical, Legal, and Socio-Economic Considerations
+6.1  Regulatory compliance and data governance
+Only the public SQuAD 2.0 release is used, under its published licence. No name, account, or location is stored, prompts stay on the phone, and borrowed handsets run the test app with no account signed in, so personal data under the GDPR are not processed.
+6.2  Algorithmic bias and mitigation
+The set is English and largely Wikipedia-style, so no fairness claim is made across languages or groups. The error review is limited to unanswerable items and to refusals that follow the sustained run.
+6.3  Risk, accountability, and explanation
+This is a student prototype, not a high-risk system under the EU AI Act. The refusal is the control. The log stores the features, the failure probability, and τ, and the logistic weights explain the score. SHAP is not used.
+7.  Project Plan and Timeline
+The dissertation runs from 12 January 2027 to 14 August 2027 (Table 1). If Milestone 1 yields fewer than four phones, the cross-phone claim is dropped before fitting, and that phone is used for cool versus sustained only.
+Table 1. Dissertation milestones, 12 January 2027 to 14 August 2027.
+Milestone
+Dates
+Output that must exist
+1. Pilot
+12 Jan – 6 Feb 2027
+Reading frozen. Phones logged. 30-item pilot. Model size and latency cut fixed.
+2. Pipeline
+9 Feb – 6 Mar 2027
+Item split locked. The app runs from item to log on every secured phone.
+3. Controller
+9 Mar – 10 Apr 2027
+Baselines done. Weights and τ fixed on development phones only.
+4. Test
+13 Apr – 29 May 2027
+Leave-one-phone-out, cool, sustained, and buffer runs scored once.
+5. Thesis
+1 Jun – 14 Aug 2027
+30–60 cases reviewed. Draft, revisions, submission.
+8.  Strengths and Weaknesses
+The held-out phone does not fit the weights or τ, and test items are scored once, so a negative result stands. Six phones will not represent every chipset, and frequency policy already differs by vendor (Xiao et al., 2024). Logistic regression will miss a sharp interaction, while a tree on this sample would fit the training phones. The passages are given, the cool set is 40 items, the questions are English only, and both the latency cut and the 20% cap are research choices rather than measured user tolerances (Kamath, Jia and Liang, 2020). A refusal is not forwarded to a cloud model.
+9.  References
+Android Developers (2026) PowerManager. Available at: https://developer.android.com/reference/android/os/PowerManager (Accessed: 26 November 2026).
+Gerganov, G. and contributors (n.d.) llama.cpp [software]. Available at: https://github.com/ggerganov/llama.cpp (Accessed: 26 November 2026).
+Guo, C., Pleiss, G., Sun, Y. and Weinberger, K.Q. (2017) 'On calibration of modern neural networks', in Precup, D. and Teh, Y.W. (eds.) Proceedings of the 34th International Conference on Machine Learning. Sydney: PMLR, pp. 1321–1330.
+Kamath, A., Jia, R. and Liang, P. (2020) 'Selective question answering under domain shift', in Jurafsky, D., Chai, J., Schluter, N. and Tetreault, J. (eds.) Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics. Online: Association for Computational Linguistics, pp. 5684–5696.
+Kuhn, L., Gal, Y. and Farquhar, S. (2023) 'Semantic uncertainty: Linguistic invariances for uncertainty estimation in natural language generation', International Conference on Learning Representations. arXiv:2302.09664. Available at: https://arxiv.org/abs/2302.09664 (Accessed: 26 November 2026).
+Li, Y., Liu, J., Zhang, H., Narayanan, M.B., Sharma, U., Zhang, S., Hu, P., Zeng, Y., Liu, B., Raghuram, J. and Banerjee, S. (2024) 'PalmBench: A comprehensive benchmark of compressed large language models on mobile platforms'. arXiv:2410.05315. Available at: https://arxiv.org/abs/2410.05315 (Accessed: 26 November 2026).
+Liu, Z., Zhao, C., Iandola, F., Lai, C., Tian, Y., Fedorov, I., Xiong, Y., Chang, E., Shi, Y., Krishnamoorthi, R., Lai, L. and Chandra, V. (2024) 'MobileLLM: Optimizing sub-billion parameter language models for on-device use cases', Proceedings of the 41st International Conference on Machine Learning. PMLR 235. Available at: https://proceedings.mlr.press/v235/liu24ce.html (Accessed: 26 November 2026).
+Park, T., Lee, G. and Kim, M.-S. (2025) 'MobileRAG: A fast, memory-efficient, and energy-efficient method for on-device RAG'. arXiv:2507.01079. Available at: https://arxiv.org/abs/2507.01079 (Accessed: 26 November 2026).
+Proskurina, I., Brun, L., Metzler, G. and Velcin, J. (2024) 'When quantization affects confidence of large language models?', in Duh, K., Gomez, H. and Bethard, S. (eds.) Findings of the Association for Computational Linguistics: NAACL 2024. Mexico City: Association for Computational Linguistics, pp. 1918–1928.
+Rajpurkar, P., Jia, R. and Liang, P. (2018) 'Know what you don't know: Unanswerable questions for SQuAD', in Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers). Melbourne: Association for Computational Linguistics, pp. 784–789.
+Xiao, J., Huang, Q., Chen, X. and Tian, C. (2024) 'Large language model performance benchmarking on mobile platforms: A thorough evaluation'. arXiv:2410.03613. Available at: https://arxiv.org/abs/2410.03613 (Accessed: 26 November 2026).
+Zhong, M., Wang, G., Chuang, Y.-N. and Zou, N. (2025) 'Quantized can still be calibrated: A unified framework to calibration in quantized large language models', Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). Vienna: Association for Computational Linguistics. Available at: https://aclanthology.org/2025.acl-long.1473/ (Accessed: 26 November 2026).
