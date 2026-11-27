@@ -1,6 +1,0 @@
-Need to finalise the concrete topic.
-Need to make a proepr project plan with time table
-
-Short list of probable research area:
-
-1. LLMs at the edge
